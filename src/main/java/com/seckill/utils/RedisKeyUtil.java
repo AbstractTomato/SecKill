@@ -13,6 +13,10 @@ public final class RedisKeyUtil {
         return "captcha:" + phone;
     }
 
+    public static String captchaRateKey(String ip) {
+        return "captcha:rate:" + ip;
+    }
+
     /** 登录 token key: token:<token> */
     public static String tokenKey(String token) {
         return "token:" + token;
@@ -44,6 +48,10 @@ public final class RedisKeyUtil {
 
     public static String seckillRetryKey(Long goodsId, Long userId) {
         return "seckill:retry:" + goodsId + ":" + userId;
+    }
+
+    public static String seckillRateKey(Long goodsId, Long userId) {
+        return "seckill:rate:" + goodsId + ":" + userId;
     }
 
     public static String goodsListLockKey() {

@@ -32,6 +32,7 @@ public class SeckillService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SeckillService.class);
     private static final Duration MESSAGE_DEDUP_TTL = Duration.ofMinutes(5);
+    private static final Duration SECKILL_RATE_LIMIT_TTL = Duration.ofSeconds(1);
     private static final String MESSAGE_STATUS_SENT = "SENT";
     private static final String MESSAGE_STATUS_PROCESSED = "PROCESSED";
 
@@ -110,6 +111,8 @@ public class SeckillService {
         checkTimeWindow(goodsId);
 
         Long userId = userSession.getId();
+        checkSeckillRateLimit(goodsId, userId);
+
         String orderedKey = RedisKeyUtil.seckillOrderedKey(goodsId);
         String stockKey = RedisKeyUtil.seckillStockKey(goodsId);
         String userIdText = String.valueOf(userId);
@@ -209,6 +212,17 @@ public class SeckillService {
                     goodsId, userId, rollbackException);
         }
         LOGGER.error("Failed to send seckill message to Kafka, goodsId={}, userId={}", goodsId, userId, ex);
+    }
+
+    private void checkSeckillRateLimit(Long goodsId, Long userId) {
+        Boolean allowed = stringRedisTemplate.opsForValue().setIfAbsent(
+                RedisKeyUtil.seckillRateKey(goodsId, userId),
+                "1",
+                SECKILL_RATE_LIMIT_TTL
+        );
+        if (!Boolean.TRUE.equals(allowed)) {
+            throw new BusinessException(ResultCode.RATE_LIMITED);
+        }
     }
 
     private void checkTimeWindow(Long goodsId) {

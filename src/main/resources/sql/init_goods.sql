@@ -44,11 +44,11 @@ CREATE TABLE IF NOT EXISTS `seckill_order` (
 
 INSERT INTO `goods` (`id`, `goods_name`, `goods_title`, `goods_img`, `goods_detail`, `goods_price`, `goods_stock`)
 VALUES
-    (1, 'iPhone 17 Pro Max', 'Flagship large-screen Pro Max, flash sale discount 2000', 'https://via.placeholder.com/300x300?text=iPhone+17+Pro+Max', '6.9-inch XDR display, A19 Pro chip, 48MP triple camera system, titanium design, starts from 256GB.', 9999.00, 80),
-    (2, 'iPhone 17 Pro', 'Compact flagship Pro, flash sale discount 1700', 'https://via.placeholder.com/300x300?text=iPhone+17+Pro', '6.3-inch XDR display, A19 Pro chip, 48MP triple camera system, titanium design, starts from 128GB.', 8999.00, 100),
-    (3, 'iPhone 17 Air', 'Ultra-thin Air design, flash sale discount 1200', 'https://via.placeholder.com/300x300?text=iPhone+17+Air', '6.6-inch OLED full-screen display, A19 chip, 48MP dual camera system, 6.1mm ultra-thin body, starts from 128GB.', 6999.00, 120),
-    (4, 'iPhone 17', 'Standard iPhone, flash sale discount 1000', 'https://via.placeholder.com/300x300?text=iPhone+17', '6.1-inch OLED full-screen display, A18 chip, 48MP dual camera system, aluminum design, starts from 128GB.', 5999.00, 100),
-    (5, 'Xiaomi 17 Max', 'Large-battery imaging flagship, flash sale discount 1600', 'https://via.placeholder.com/300x300?text=Xiaomi+17+Max', '6.9-inch 1.5K straight display, flagship Snapdragon platform, 200MP main camera, 8000mAh battery, 100W wired fast charging, starts from 256GB.', 5299.00, 70)
+    (1, 'iPhone 17 Pro Max', 'Flagship large-screen Pro Max, flash sale discount 2000', 'https://via.placeholder.com/300x300?text=iPhone+17+Pro+Max', '6.9-inch XDR display, A19 Pro chip, 48MP triple camera system, titanium design, starts from 256GB.', 9999.00, 300),
+    (2, 'iPhone 17 Pro', 'Compact flagship Pro, flash sale discount 1700', 'https://via.placeholder.com/300x300?text=iPhone+17+Pro', '6.3-inch XDR display, A19 Pro chip, 48MP triple camera system, titanium design, starts from 128GB.', 8999.00, 300),
+    (3, 'iPhone 17 Air', 'Ultra-thin Air design, flash sale discount 1200', 'https://via.placeholder.com/300x300?text=iPhone+17+Air', '6.6-inch OLED full-screen display, A19 chip, 48MP dual camera system, 6.1mm ultra-thin body, starts from 128GB.', 6999.00, 300),
+    (4, 'iPhone 17', 'Standard iPhone, flash sale discount 1000', 'https://via.placeholder.com/300x300?text=iPhone+17', '6.1-inch OLED full-screen display, A18 chip, 48MP dual camera system, aluminum design, starts from 128GB.', 5999.00, 300),
+    (5, 'Xiaomi 17 Max', 'Large-battery imaging flagship, flash sale discount 1600', 'https://via.placeholder.com/300x300?text=Xiaomi+17+Max', '6.9-inch 1.5K straight display, flagship Snapdragon platform, 200MP main camera, 8000mAh battery, 100W wired fast charging, starts from 256GB.', 5299.00, 300)
 ON DUPLICATE KEY UPDATE
     `goods_name` = VALUES(`goods_name`),
     `goods_title` = VALUES(`goods_title`),

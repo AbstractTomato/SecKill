@@ -2,10 +2,15 @@ package com.seckill.mapper;
 
 import com.seckill.bean.OrderInfo;
 import com.seckill.bean.SeckillOrder;
+import com.seckill.vo.OrderDetailVO;
+import com.seckill.vo.OrderVO;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+
+import java.util.List;
 
 @Mapper
 public interface OrderMapper {
@@ -21,7 +26,33 @@ public interface OrderMapper {
             FROM seckill_order
             WHERE user_id = #{userId} AND goods_id = #{goodsId}
             """)
-    SeckillOrder selectSeckillOrder(Long userId, Long goodsId);
+    SeckillOrder selectSeckillOrder(@Param("userId") Long userId, @Param("goodsId") Long goodsId);
+
+    @Select("""
+            SELECT oi.id AS order_id, oi.goods_name, oi.goods_price, oi.order_status, oi.create_date
+            FROM order_info oi
+            INNER JOIN seckill_order so ON so.order_id = oi.id
+            WHERE so.user_id = #{userId}
+            ORDER BY oi.create_date DESC
+            """)
+    List<OrderVO> selectOrderList(@Param("userId") Long userId);
+
+    @Select("""
+            SELECT oi.id AS order_id,
+                   oi.goods_id,
+                   oi.goods_name,
+                   g.goods_img,
+                   g.goods_detail,
+                   oi.goods_count,
+                   oi.goods_price,
+                   oi.order_status,
+                   oi.create_date
+            FROM order_info oi
+            INNER JOIN seckill_order so ON so.order_id = oi.id
+            INNER JOIN goods g ON g.id = oi.goods_id
+            WHERE oi.id = #{orderId} AND so.user_id = #{userId}
+            """)
+    OrderDetailVO selectOrderDetail(@Param("orderId") Long orderId, @Param("userId") Long userId);
 
     /**
      * 插入订单主表。

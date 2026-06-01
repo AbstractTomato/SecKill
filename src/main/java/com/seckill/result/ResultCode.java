@@ -19,6 +19,9 @@ public enum ResultCode {
     SECKILL_REPEAT(40010, "此商品已抢过"),
     SECKILL_SOLD_OUT(40011, "已售罄"),
     SECKILL_BUSY(40012, "系统繁忙，请稍后重试"),
+    ORDER_NOT_FOUND(40013, "订单不存在"),
+    RATE_LIMITED(42900, "访问过于频繁，请稍后重试"),
+    CAPTCHA_RATE_LIMITED(42901, "验证码请求过于频繁，请稍后再试"),
     SYSTEM_ERROR(50000, "系统异常");
 
     private final int code;

@@ -394,7 +394,64 @@ public void onMessage(ConsumerRecord<String, String> record, Acknowledgment ack)
 
 # 四、订单模块
 
-> 待讨论
+订单模块只做**查询展示**，不涉及支付、退款、物流。订单创建由秒杀 Consumer 异步完成，本模块只提供当前用户的订单列表和详情。
+
+## 1. 接口
+
+| Method | Path | 说明 |
+|--------|------|------|
+| GET | `/order/list` | 当前用户的秒杀订单列表 |
+| GET | `/order/detail/{orderId}` | 某个订单详情 |
+
+两个接口都需要登录（`UserSession` 注入），只能查看自己的订单。
+
+## 2. 订单列表
+
+SQL：`order_info` + `seckill_order` 关联，按用户 ID 过滤 + 按时间倒序：
+
+```sql
+SELECT oi.id, oi.goods_name, oi.goods_price, oi.order_status, oi.create_date
+FROM order_info oi
+INNER JOIN seckill_order so ON so.order_id = oi.id
+WHERE so.user_id = #{userId}
+ORDER BY oi.create_date DESC
+```
+
+返回字段：`orderId`、`goodsName`、`goodsPrice`、`orderStatus`、`createDate`。不需要分页——每个用户最多 5 单。
+
+## 3. 订单详情
+
+SQL：`order_info` + `seckill_order` + `goods` 三表关联，同时过滤 `orderId` 和 `userId`：
+
+```sql
+SELECT oi.id, oi.goods_id, oi.goods_name, g.goods_img, g.goods_detail,
+       oi.goods_count, oi.goods_price, oi.order_status, oi.create_date
+FROM order_info oi
+INNER JOIN seckill_order so ON so.order_id = oi.id
+INNER JOIN goods g ON g.id = oi.goods_id
+WHERE oi.id = #{orderId} AND so.user_id = #{userId}
+```
+
+**WHERE 条件必须带 `userId`**：防止越权查看他人订单。商品图片和详情通过 JOIN `goods` 表获取，不冗余到 `order_info`。
+
+## 4. 订单状态
+
+| 状态码 | 含义 |
+|--------|------|
+| `0` | 新订单（已创建，秒杀成功） |
+
+秒杀场景不需要复杂状态流转。订单存在即表示"抢购成功"。
+
+## 5. 新增代码清单
+
+| 文件 | 内容 |
+|------|------|
+| `vo/OrderVO.java` | 订单列表 VO |
+| `vo/OrderDetailVO.java` | 订单详情 VO |
+| `mapper/OrderMapper.java` | 加查询 SQL（已有文件，追加方法） |
+| `service/OrderService.java` | 加 `list(userId)` 和 `detail(orderId, userId)` |
+| `controller/OrderController.java` | 两个 GET 接口 |
+| `result/ResultCode.java` | 加 `ORDER_NOT_FOUND` 错误码 |
 
 ---
 
@@ -406,7 +463,133 @@ public void onMessage(ConsumerRecord<String, String> record, Acknowledgment ack)
 
 # 六、限流 & 防刷
 
-> 待讨论
+从外到内三层防线，逐层收紧。
+
+---
+
+## 第一层：通用接口限流（拦截器 + Guava RateLimiter）
+
+**目标**：所有接口统一做 IP 级限流，单个 IP 每秒最多 50 个请求，瞬时突发上限 100。
+
+**流程**：
+
+```
+请求进来
+  ↓
+RateLimitInterceptor.preHandle()
+  ↓
+从 ConcurrentHashMap 取或创建该 IP 的令牌桶
+  ↓
+rateLimiter.tryAcquire()
+  ├─ true  → 放行
+  └─ false → 返回 429 "访问过于频繁"
+```
+
+**实现要点**：
+
+- `ConcurrentHashMap<String, RateLimiter>` 存 IP → 令牌桶映射，用完不删。
+- `RateLimiter.create(50)` 每秒 50 个令牌。
+- `@RateLimit` 标记注解打在 Controller 类上，拦截器通过 `HandlerMethod.getBeanType().isAnnotationPresent(RateLimit.class)` 判断是否需要限流。
+- 拦截器在 `WebMvcConfig.addInterceptors()` 中注册，拦截所有 `/` 路径。
+
+| 新增文件 | 说明 |
+|----------|------|
+| `annotation/RateLimit.java` | 标记注解，打在 Controller 类上即开启限流 |
+| `interceptor/RateLimitInterceptor.java` | IP 级令牌桶限流拦截器 |
+
+| 修改文件 | 说明 |
+|----------|------|
+| `config/WebMvcConfig.java` | 注册拦截器 |
+| `result/ResultCode.java` | 加 `RATE_LIMITED` 错误码 |
+
+---
+
+## 第二层：秒杀接口防刷（Redis SET NX EX）
+
+**目标**：秒杀接口上，同一个用户对同一个商品 1 秒内只能请求 1 次。放在时间窗口判断之后、Lua 脚本之前。
+
+```
+POST /seckill/{goodsId}
+  ↓
+时间窗口判断（JVM）→ 不在窗口内直接返回
+  ↓
+SET seckill:rate:<goodsId>:<userId> "1" EX 1 NX
+  ├─ OK（设置成功）→ 放行，进入 Lua 脚本
+  └─ nil（key 已存在）→ 返回"操作太频繁，请稍后重试"
+```
+
+**实现要点**：
+
+- `SET key value NX EX 1` 单条原子命令，不需要先 GET 再 SET。
+- TTL 1 秒自动过期，零清理成本。
+- 放在 Lua 脚本之前：超时的请求连库存 DECR 都不触发，省 Redis 操作。
+- 放在时间窗口之后：秒杀未开始时的试探请求连这条 Redis 都不查。
+
+**Redis Key**：`seckill:rate:<goodsId>:<userId>`，TTL 1 秒。
+
+| 修改文件 | 说明 |
+|----------|------|
+| `service/SeckillService.java` | `submit()` 中时间窗口之后加 SET NX 检查 |
+| `utils/RedisKeyUtil.java` | 加 `seckillRateKey()` |
+| `result/ResultCode.java` | 加 `RATE_LIMITED` 或 `SECKILL_BUSY` 复用 |
+
+---
+
+## 第三层：验证码接口防刷（Redis INCR）
+
+**目标**：防止脚本狂刷验证码接口（图片生成是 CPU 密集型操作）。同一个 IP 每分钟最多 10 次。
+
+```
+GET /captcha?phone=xxx
+  ↓
+获取客户端真实 IP
+  ↓
+INCR captcha:rate:<IP>
+  ├─ 返回值 == 1 → EXPIRE captcha:rate:<IP> 60
+  ├─ 返回值 > 10 → 返回"验证码请求过于频繁，请稍后再试"
+  └─ 返回值 ≤ 10 → 放行，正常生成验证码
+```
+
+**实现要点**：
+
+- 用 `INCR` 而非 `SET NX`：需要计数，才能限制"每分钟最多 10 次"。
+- 首次请求（返回 1）时设 60 秒过期，过期后计数器自动清零。
+- 这层加在 `CaptchaService.generateCaptcha()` 方法开头，不满足直接抛异常。
+
+| 修改文件 | 说明 |
+|----------|------|
+| `service/CaptchaService.java` | `generateCaptcha()` 开头加 IP 频率检查 |
+| `utils/RedisKeyUtil.java` | 加 `captchaRateKey()` |
+| `result/ResultCode.java` | 加 `CAPTCHA_RATE_LIMITED` 错误码 |
+
+---
+
+## 三层总览
+
+| 层级 | 作用范围 | 工具 | 限流对象 | 阈值 | 拦截位置 |
+|------|---------|------|---------|------|---------|
+| 第一层 | 所有接口 | Guava RateLimiter | IP | 50/s | 拦截器 preHandle |
+| 第二层 | `/seckill/{goodsId}` | Redis SET NX EX | 用户+商品 | 1次/秒 | 时间窗口之后、Lua 之前 |
+| 第三层 | `/captcha` | Redis INCR | IP | 10次/分钟 | Controller 方法体内 |
+
+---
+
+## 新增文件清单
+
+| 文件 | 说明 |
+|------|------|
+| `annotation/RateLimit.java` | 标记注解（打在 Controller 类上） |
+| `interceptor/RateLimitInterceptor.java` | 通用限流拦截器 |
+
+## 修改文件清单
+
+| 文件 | 说明 |
+|------|------|
+| `config/WebMvcConfig.java` | 注册拦截器 |
+| `service/SeckillService.java` | `submit()` 加第二层 SET NX |
+| `service/CaptchaService.java` | `generateCaptcha()` 加第三层 INCR |
+| `utils/RedisKeyUtil.java` | 加 `seckillRateKey()`、`captchaRateKey()` |
+| `result/ResultCode.java` | 加 `RATE_LIMITED`、`CAPTCHA_RATE_LIMITED`
 
 ---
 
@@ -467,3 +650,35 @@ CREATE TABLE `seckill_goods` (
 
 - **goods 和 seckill_goods 分表**：静态商品信息和秒杀活动信息解耦。
 - 展示时用 `GoodsVo` 关联查询，`goods_id` 唯一绑定一个秒杀活动。
+
+## order_info 表（订单主表）
+
+```sql
+CREATE TABLE `order_info` (
+    `id`          BIGINT         AUTO_INCREMENT PRIMARY KEY COMMENT '订单ID',
+    `user_id`     BIGINT         NOT NULL COMMENT '用户ID',
+    `goods_id`    BIGINT         NOT NULL COMMENT '商品ID',
+    `goods_name`  VARCHAR(64)    NOT NULL COMMENT '下单时商品名称快照',
+    `goods_count` INT            NOT NULL DEFAULT 1 COMMENT '数量（秒杀固定为1）',
+    `goods_price` DECIMAL(10,2)  NOT NULL COMMENT '成交价格（秒杀价快照）',
+    `order_status` INT           NOT NULL DEFAULT 0 COMMENT '0=新订单',
+    `create_date` DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '下单时间',
+    INDEX `idx_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单主表';
+```
+
+## seckill_order 表（秒杀订单关联表）
+
+```sql
+CREATE TABLE `seckill_order` (
+    `id`       BIGINT  AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `user_id`  BIGINT  NOT NULL COMMENT '用户ID',
+    `order_id` BIGINT  NOT NULL COMMENT '订单ID',
+    `goods_id` BIGINT  NOT NULL COMMENT '商品ID',
+    UNIQUE KEY `uk_user_goods` (`user_id`, `goods_id`),
+    INDEX `idx_order_id` (`order_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='秒杀订单关联表';
+```
+
+- `uk_user_goods`（user_id + goods_id 唯一索引）是**幂等防重兜底**：即使 Kafka 重复投递，二次 INSERT 也会触发唯一约束冲突，不会为一个用户同一个商品创建两笔订单。
+- `order_info` 和 `seckill_order` 分表：前者存通用订单信息，后者存秒杀维度的幂等约束，职责分开。

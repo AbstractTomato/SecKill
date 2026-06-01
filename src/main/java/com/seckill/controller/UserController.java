@@ -1,11 +1,14 @@
 package com.seckill.controller;
 
+import com.seckill.annotation.RateLimit;
 import com.seckill.dto.AuthRequest;
 import com.seckill.result.Result;
 import com.seckill.service.CaptchaService;
 import com.seckill.service.UserService;
+import com.seckill.utils.ClientIpUtil;
 import com.seckill.vo.CaptchaVO;
 import com.seckill.vo.LoginVO;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.validation.annotation.Validated;
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Validated
+@RateLimit
 @RestController
 public class UserController {
 
@@ -31,8 +35,9 @@ public class UserController {
     @GetMapping("/captcha")
     public Result<CaptchaVO> captcha(@RequestParam
                                      @Pattern(regexp = "^1\\d{10}$", message = "手机号格式错误")
-                                     String phone) {
-        return Result.success(captchaService.generateCaptcha(phone));
+                                     String phone,
+                                     HttpServletRequest request) {
+        return Result.success(captchaService.generateCaptcha(phone, ClientIpUtil.resolveClientIp(request)));
     }
 
     /** 登录 */

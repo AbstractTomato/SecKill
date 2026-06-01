@@ -8,8 +8,12 @@ import com.seckill.mapper.OrderMapper;
 import com.seckill.mapper.SeckillGoodsMapper;
 import com.seckill.result.ResultCode;
 import com.seckill.vo.GoodsVO;
+import com.seckill.vo.OrderDetailVO;
+import com.seckill.vo.OrderVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Service
 public class OrderService {
@@ -22,6 +26,22 @@ public class OrderService {
     public OrderService(OrderMapper orderMapper, SeckillGoodsMapper seckillGoodsMapper) {
         this.orderMapper = orderMapper;
         this.seckillGoodsMapper = seckillGoodsMapper;
+    }
+
+    public List<OrderVO> list(Long userId) {
+        return orderMapper.selectOrderList(userId);
+    }
+
+    public OrderDetailVO detail(Long orderId, Long userId) {
+        if (orderId == null || orderId <= 0) {
+            throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
+        }
+
+        OrderDetailVO orderDetail = orderMapper.selectOrderDetail(orderId, userId);
+        if (orderDetail == null) {
+            throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
+        }
+        return orderDetail;
     }
 
     @Transactional

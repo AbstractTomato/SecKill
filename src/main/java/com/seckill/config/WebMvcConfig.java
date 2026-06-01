@@ -1,8 +1,10 @@
 package com.seckill.config;
 
+import com.seckill.interceptor.RateLimitInterceptor;
 import com.seckill.resolver.UserArgumentResolver;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.util.List;
@@ -13,10 +15,17 @@ import java.util.List;
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
 
+    private final RateLimitInterceptor rateLimitInterceptor;
     private final UserArgumentResolver userArgumentResolver;
 
-    public WebMvcConfig(UserArgumentResolver userArgumentResolver) {
+    public WebMvcConfig(RateLimitInterceptor rateLimitInterceptor, UserArgumentResolver userArgumentResolver) {
+        this.rateLimitInterceptor = rateLimitInterceptor;
         this.userArgumentResolver = userArgumentResolver;
+    }
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(rateLimitInterceptor).addPathPatterns("/**");
     }
 
     @Override

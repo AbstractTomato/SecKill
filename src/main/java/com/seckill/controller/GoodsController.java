@@ -1,11 +1,13 @@
 package com.seckill.controller;
 
+import com.seckill.annotation.RateLimit;
 import com.seckill.service.GoodsService;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
+@RateLimit
 @RestController
 public class GoodsController {
 

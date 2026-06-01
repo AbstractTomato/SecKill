@@ -1,5 +1,6 @@
 package com.seckill.controller;
 
+import com.seckill.annotation.RateLimit;
 import com.seckill.result.Result;
 import com.seckill.service.SeckillService;
 import com.seckill.vo.SeckillResultVO;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@RateLimit
 @RestController
 public class SeckillController {
 
